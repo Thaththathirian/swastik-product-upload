@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useProductStore } from "@/store/productStore";
@@ -7,19 +7,31 @@ import { MediaUploader } from "@/components/MediaUploader";
 import { VariantManager } from "@/components/VariantManager";
 import { FeatureSectionManager } from "@/components/FeatureSectionManager";
 import { SpecificationManager } from "@/components/SpecificationManager";
+import { RequiredLabel } from "@/components/RequiredLabel";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Save, ArrowLeft } from "lucide-react";
+import { Save, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+// Required fields config
+const REQUIRED_FIELDS: { key: string; label: string }[] = [
+  { key: "name", label: "Product Name" },
+  { key: "sellingPrice", label: "Selling Price" },
+  { key: "category", label: "Category" },
+];
 
 const ProductForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addProduct, updateProduct, getProduct } = useProductStore();
   const isEdit = Boolean(id);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const [form, setForm] = useState<Omit<Product, "id" | "createdAt" | "updatedAt">>({ ...emptyProduct });
 
@@ -33,8 +45,10 @@ const ProductForm = () => {
     }
   }, [id, getProduct]);
 
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: false }));
+  };
 
   const setShipping = (key: string, value: string) =>
     setForm((prev) => ({ ...prev, shipping: { ...prev.shipping, [key]: value } }));
@@ -42,11 +56,49 @@ const ProductForm = () => {
   const setSeo = (key: string, value: string) =>
     setForm((prev) => ({ ...prev, seo: { ...prev.seo, [key]: value } }));
 
-  const handleSave = () => {
-    if (!form.name.trim()) {
-      toast.error("Product name is required");
+  const registerRef = useCallback((key: string) => (el: HTMLElement | null) => {
+    fieldRefs.current[key] = el;
+  }, []);
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, boolean> = {};
+    let firstErrorKey: string | null = null;
+
+    for (const field of REQUIRED_FIELDS) {
+      const value = form[field.key as keyof typeof form];
+      const isEmpty = value === "" || value === 0 || value === undefined || value === null;
+      if (isEmpty) {
+        newErrors[field.key] = true;
+        if (!firstErrorKey) firstErrorKey = field.key;
+      }
+    }
+
+    setErrors(newErrors);
+
+    if (firstErrorKey && fieldRefs.current[firstErrorKey]) {
+      const el = fieldRefs.current[firstErrorKey];
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Focus the input inside
+      setTimeout(() => {
+        const input = el?.querySelector("input, textarea, select") as HTMLElement;
+        input?.focus();
+      }, 400);
+    }
+
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validate()) {
+      toast.error("Please fill in all required fields");
       return;
     }
+
+    setSaving(true);
+
+    // Simulate upload finalization delay
+    await new Promise((r) => setTimeout(r, 1200));
+
     const now = new Date().toISOString();
     if (isEdit && id) {
       updateProduct(id, { ...form, updatedAt: now });
@@ -55,6 +107,7 @@ const ProductForm = () => {
       addProduct({ ...form, id: crypto.randomUUID(), createdAt: now, updatedAt: now });
       toast.success("Product created");
     }
+    setSaving(false);
     navigate("/products");
   };
 
@@ -65,15 +118,16 @@ const ProductForm = () => {
   return (
     <AppLayout>
       <div className="space-y-6 max-w-4xl">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 sticky top-0 z-10 bg-background py-3 -mt-3 border-b border-border mb-2">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <h1 className="text-2xl font-bold tracking-tight">{isEdit ? "Edit Product" : "Add Product"}</h1>
           </div>
-          <Button onClick={handleSave} className="gap-1.5">
-            <Save className="w-4 h-4" /> Save
+          <Button onClick={handleSave} disabled={saving} className="gap-1.5">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? "Saving..." : "Save"}
           </Button>
         </div>
 
@@ -81,9 +135,14 @@ const ProductForm = () => {
         <div className="form-section">
           <h2 className="section-title">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Product Name *</Label>
-              <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Enter product name" />
+            <div className="space-y-1.5" ref={registerRef("name")}>
+              <RequiredLabel required error={errors.name}>Product Name</RequiredLabel>
+              <Input
+                value={form.name}
+                onChange={(e) => set("name", e.target.value)}
+                placeholder="Enter product name"
+                className={cn(errors.name && "border-destructive ring-destructive")}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>SKU</Label>
@@ -100,9 +159,13 @@ const ProductForm = () => {
               <Label>Brand</Label>
               <Input value={form.brand} onChange={(e) => set("brand", e.target.value)} />
             </div>
-            <div className="space-y-1.5">
-              <Label>Category</Label>
-              <Input value={form.category} onChange={(e) => set("category", e.target.value)} />
+            <div className="space-y-1.5" ref={registerRef("category")}>
+              <RequiredLabel required error={errors.category}>Category</RequiredLabel>
+              <Input
+                value={form.category}
+                onChange={(e) => set("category", e.target.value)}
+                className={cn(errors.category && "border-destructive ring-destructive")}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Sub Category</Label>
@@ -156,9 +219,14 @@ const ProductForm = () => {
               <Label>MRP (₹)</Label>
               <Input type="number" value={form.mrp} onChange={(e) => set("mrp", +e.target.value)} />
             </div>
-            <div className="space-y-1.5">
-              <Label>Selling Price (₹)</Label>
-              <Input type="number" value={form.sellingPrice} onChange={(e) => set("sellingPrice", +e.target.value)} />
+            <div className="space-y-1.5" ref={registerRef("sellingPrice")}>
+              <RequiredLabel required error={errors.sellingPrice}>Selling Price (₹)</RequiredLabel>
+              <Input
+                type="number"
+                value={form.sellingPrice}
+                onChange={(e) => set("sellingPrice", +e.target.value)}
+                className={cn(errors.sellingPrice && "border-destructive ring-destructive")}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Discount %</Label>
@@ -292,8 +360,9 @@ const ProductForm = () => {
 
         <div className="flex justify-end gap-3 pb-8">
           <Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
-          <Button onClick={handleSave} className="gap-1.5">
-            <Save className="w-4 h-4" /> {isEdit ? "Update Product" : "Create Product"}
+          <Button onClick={handleSave} disabled={saving} className="gap-1.5">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? "Saving..." : isEdit ? "Update Product" : "Create Product"}
           </Button>
         </div>
       </div>
