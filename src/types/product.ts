@@ -14,6 +14,7 @@ export interface ProductVariant {
   name: string;
   price: number | null;
   stock: number | null;
+  customAttributes?: { id: string; key: string; value: string }[];
 }
 
 export interface FeatureItem {

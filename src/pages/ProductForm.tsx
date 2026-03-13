@@ -341,19 +341,19 @@ const ProductForm = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <Label>Weight (kg)</Label>
-              <Input value={form.shipping.weight} onChange={(e) => setShipping("weight", e.target.value)} disabled={isView} />
+              <Input value={form.shipping.weight} onChange={(e) => setShipping("weight", e.target.value)} placeholder="e.g. 1.5" disabled={isView} />
             </div>
             <div className="space-y-1.5">
               <Label>Length (cm)</Label>
-              <Input value={form.shipping.length} onChange={(e) => setShipping("length", e.target.value)} disabled={isView} />
+              <Input value={form.shipping.length} onChange={(e) => setShipping("length", e.target.value)} placeholder="e.g. 25" disabled={isView} />
             </div>
             <div className="space-y-1.5">
               <Label>Width (cm)</Label>
-              <Input value={form.shipping.width} onChange={(e) => setShipping("width", e.target.value)} disabled={isView} />
+              <Input value={form.shipping.width} onChange={(e) => setShipping("width", e.target.value)} placeholder="e.g. 20" disabled={isView} />
             </div>
             <div className="space-y-1.5">
               <Label>Height (cm)</Label>
-              <Input value={form.shipping.height} onChange={(e) => setShipping("height", e.target.value)} disabled={isView} />
+              <Input value={form.shipping.height} onChange={(e) => setShipping("height", e.target.value)} placeholder="e.g. 10" disabled={isView} />
             </div>
           </div>
           <div className="space-y-1.5 mt-4">
