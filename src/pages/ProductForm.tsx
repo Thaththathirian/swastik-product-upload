@@ -141,7 +141,7 @@ const ProductForm = () => {
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="Enter product name"
-                className={cn(errors.name && "border-destructive ring-destructive")}
+                className={cn(errors.name && "border-destructive")}
               />
             </div>
             <div className="space-y-1.5">
@@ -164,7 +164,7 @@ const ProductForm = () => {
               <Input
                 value={form.category}
                 onChange={(e) => set("category", e.target.value)}
-                className={cn(errors.category && "border-destructive ring-destructive")}
+                className={cn(errors.category && "border-destructive")}
               />
             </div>
             <div className="space-y-1.5">
@@ -225,7 +225,7 @@ const ProductForm = () => {
                 type="number"
                 value={form.sellingPrice}
                 onChange={(e) => set("sellingPrice", +e.target.value)}
-                className={cn(errors.sellingPrice && "border-destructive ring-destructive")}
+                className={cn(errors.sellingPrice && "border-destructive")}
               />
             </div>
             <div className="space-y-1.5">
@@ -252,7 +252,7 @@ const ProductForm = () => {
               <select
                 value={form.stockStatus}
                 onChange={(e) => set("stockStatus", e.target.value as "in_stock" | "out_of_stock")}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:ring-2 focus:ring-ring"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:border-ring"
               >
                 <option value="in_stock">In Stock</option>
                 <option value="out_of_stock">Out of Stock</option>

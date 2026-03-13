@@ -1,7 +1,26 @@
-import { useCallback, useState, useRef } from "react";
-import { Upload, X, Image as ImageIcon, Loader2 } from "lucide-react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import { Upload, X, Image as ImageIcon, Loader2, GripVertical } from "lucide-react";
 import { ProductMedia } from "@/types/product";
 import { Progress } from "@/components/ui/progress";
+import { ImageCropperModal } from "./ImageCropperModal";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface MediaUploaderProps {
   media: ProductMedia[];
@@ -16,16 +35,135 @@ interface UploadingFile {
   status: "uploading" | "ready" | "cancelled";
 }
 
+interface SortableMediaItemProps {
+  m: ProductMedia;
+  isMain: boolean;
+  onSetMain: (id: string) => void;
+  onRemove: (id: string) => void;
+  onEdit: (m: ProductMedia) => void;
+  uploadStatus?: UploadingFile;
+}
+
+function SortableMediaItem({ m, onSetMain, onRemove, onEdit, uploadStatus }: SortableMediaItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: m.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  const isUploading = uploadStatus && uploadStatus.status === "uploading";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative group rounded-lg overflow-hidden border-2 aspect-square bg-background transition-colors ${m.isMain ? "border-primary" : "border-border hover:border-primary/50"} ${isDragging ? "opacity-50 z-50 shadow-xl" : ""}`}
+      {...attributes}
+      {...listeners}
+    >
+      {m.type === "image" ? (
+        <img src={m.url} alt="" className="w-full h-full object-cover cursor-default" />
+      ) : (
+        <div className="w-full h-full bg-muted flex items-center justify-center">
+          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+        </div>
+      )}
+
+      {/* Upload progress overlay */}
+      {isUploading && (
+        <div className="absolute inset-0 bg-foreground/60 flex flex-col items-center justify-center gap-2">
+          <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" />
+          <div className="w-3/4">
+            <Progress value={uploadStatus.progress} className="h-1.5" />
+          </div>
+          <span className="text-[10px] text-primary-foreground font-medium">
+            {Math.round(uploadStatus.progress)}%
+          </span>
+        </div>
+      )}
+
+      <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/40 transition-colors flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 p-2">
+        <div className="flex gap-1.5" onPointerDown={e => e.stopPropagation()}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onSetMain(m.id);
+            }}
+            className="p-1.5 px-3 bg-white text-black rounded-md text-[10px] font-bold uppercase shadow-sm transition-all hover:bg-primary hover:text-white"
+          >
+            Main
+          </button>
+
+          {m.type === "image" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(m);
+              }}
+              className="p-1.5 bg-white text-black rounded-md shadow-sm transition-all hover:bg-primary hover:text-white"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(m.id);
+            }}
+            className="p-1.5 bg-destructive text-destructive-foreground rounded-md shadow-sm transition-all hover:scale-105"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="absolute bottom-2 right-2 p-1 bg-white/20 rounded backdrop-blur-sm pointer-events-none">
+          <GripVertical className="w-3.5 h-3.5 text-white" />
+        </div>
+      </div>
+
+      {m.isMain && (
+        <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded font-bold shadow-sm z-10">
+          MAIN
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function MediaUploader({ media, onChange }: MediaUploaderProps) {
   const [uploading, setUploading] = useState<UploadingFile[]>([]);
+  const [cropQueue, setCropQueue] = useState<{ id: string; url: string; type: string; originalUrl: string }[]>([]);
+  const [currentCropping, setCurrentCropping] = useState<{ id: string; url: string; type: string; originalUrl: string } | null>(null);
+  const [editingMedia, setEditingMedia] = useState<ProductMedia | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const simulateUpload = (file: File, id: string) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const simulateUpload = (id: string) => {
     let progress = 0;
     const interval = setInterval(() => {
       progress += Math.random() * 15 + 5;
       if (progress >= 95) {
-        progress = 95; // Hold at 95% until submit
+        progress = 95;
         clearInterval(interval);
         setUploading((prev) =>
           prev.map((u) => (u.id === id ? { ...u, progress: 95, status: "ready" } : u))
@@ -42,61 +180,151 @@ export function MediaUploader({ media, onChange }: MediaUploaderProps) {
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files) return;
-      const validFiles = Array.from(files).filter((f) => f.size <= 50 * 1024 * 1024); // 50MB limit
+      const validFiles = Array.from(files).filter((f) => f.size <= 50 * 1024 * 1024);
 
       if (validFiles.length < files.length) {
         alert("Some files exceeded the 50MB limit and were skipped.");
       }
 
-      const newUploads: UploadingFile[] = validFiles.map((file) => ({
-        id: crypto.randomUUID(),
-        file,
-        progress: 0,
-        url: URL.createObjectURL(file),
-        status: "uploading" as const,
-      }));
+      const newQueue = validFiles.map((file) => {
+        const url = URL.createObjectURL(file);
+        return {
+          id: crypto.randomUUID(),
+          url: url,
+          originalUrl: url,
+          type: file.type.startsWith("video") ? "video" : "image",
+          file,
+        };
+      });
 
-      setUploading((prev) => [...prev, ...newUploads]);
+      const imagesToCrop = newQueue.filter((q) => q.type === "image");
+      const videosToAdd = newQueue.filter((q) => q.type === "video");
 
-      // Start background uploads
-      newUploads.forEach((u) => simulateUpload(u.file, u.id));
+      if (videosToAdd.length > 0) {
+        const videoMedia: ProductMedia[] = videosToAdd.map((v) => ({
+          id: v.id,
+          url: v.url,
+          originalUrl: v.url,
+          type: "video",
+          isMain: false,
+          isThumbnail: false,
+        }));
 
-      // Add to media immediately with preview URLs
-      const newMedia: ProductMedia[] = newUploads.map((u, i) => ({
-        id: u.id,
-        url: u.url,
-        type: u.file.type.startsWith("video") ? "video" : "image",
-        isMain: media.length === 0 && i === 0,
-        isThumbnail: false,
-      }));
-      onChange([...media, ...newMedia]);
+        const videoUploads = videosToAdd.map((v) => ({
+          id: v.id,
+          file: v.file,
+          progress: 0,
+          url: v.url,
+          status: "uploading" as const,
+        }));
+
+        setUploading((prev) => [...prev, ...videoUploads]);
+        videoUploads.forEach((u) => simulateUpload(u.id));
+        onChange([...media, ...videoMedia]);
+      }
+
+      if (imagesToCrop.length > 0) {
+        setCropQueue((prev) => [...prev, ...imagesToCrop.map(i => ({ id: i.id, url: i.url, type: i.type, originalUrl: i.url, file: i.file }))]);
+      }
     },
     [media, onChange]
   );
 
+  useEffect(() => {
+    if (!currentCropping && cropQueue.length > 0) {
+      setCurrentCropping(cropQueue[0]);
+    }
+  }, [cropQueue, currentCropping]);
+
+  const onCropComplete = (croppedUrl: string) => {
+    // Handling newly uploaded image
+    if (currentCropping) {
+      const newMedia: ProductMedia = {
+        id: currentCropping.id,
+        url: croppedUrl,
+        originalUrl: currentCropping.originalUrl,
+        type: "image",
+        isMain: media.length === 0,
+        isThumbnail: false,
+      };
+
+      const newUpload: UploadingFile = {
+        id: currentCropping.id,
+        file: (currentCropping as any).file,
+        progress: 0,
+        url: croppedUrl,
+        status: "uploading",
+      };
+
+      setUploading((prev) => [...prev, newUpload]);
+      simulateUpload(currentCropping.id);
+      onChange([...media, newMedia]);
+
+      setCropQueue((prev) => prev.slice(1));
+      setCurrentCropping(null);
+    }
+    // Handling re-crop of existing image
+    else if (editingMedia) {
+      onChange(media.map(m => m.id === editingMedia.id ? { ...m, url: croppedUrl } : m));
+      setEditingMedia(null);
+    }
+  };
+
+  const onCropCancel = () => {
+    if (currentCropping) {
+      setCropQueue((prev) => prev.slice(1));
+      setCurrentCropping(null);
+    } else {
+      setEditingMedia(null);
+    }
+  };
+
   const remove = (id: string) => {
-    // Cancel upload if in progress
     setUploading((prev) => prev.filter((u) => u.id !== id));
     onChange(media.filter((m) => m.id !== id));
   };
 
-  const setMain = (id: string) =>
-    onChange(media.map((m) => ({ ...m, isMain: m.id === id })));
+  const setMain = (id: string) => {
+    const item = media.find((m) => m.id === id);
+    if (!item) return;
+
+    const otherItems = media.filter((m) => m.id !== id).map((m) => ({ ...m, isMain: false }));
+    const newMain = { ...item, isMain: true };
+
+    onChange([newMain, ...otherItems]);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = media.findIndex((m) => m.id === active.id);
+      const newIndex = media.findIndex((m) => m.id === over.id);
+
+      const newOrder = arrayMove(media, oldIndex, newIndex);
+      onChange(newOrder);
+    }
+  };
 
   const getUploadStatus = (id: string) => uploading.find((u) => u.id === id);
 
-  // Finalize all uploads (called externally or on submit)
-  const finalizeUploads = () => {
-    setUploading((prev) =>
-      prev.map((u) => (u.status === "ready" ? { ...u, progress: 100, status: "ready" } : u))
-    );
-  };
-
   return (
-    <div className="space-y-3">
-      <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
-        <Upload className="w-6 h-6 text-muted-foreground mb-1" />
-        <span className="text-sm text-muted-foreground">Click or drop files (max 50MB each)</span>
+    <div className="space-y-4">
+      <label className="flex flex-col items-center justify-center min-h-[160px] border-2 border-dashed border-border rounded-2xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group relative overflow-hidden">
+        <div className="flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-primary/10 transition-all duration-300">
+            <Upload className="w-7 h-7 text-muted-foreground group-hover:text-primary transition-colors" />
+          </div>
+          <p className="text-base font-semibold text-foreground mb-1">
+            Upload Product Images
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Drag and drop or click to browse
+          </p>
+          <p className="text-[11px] text-muted-foreground/60 mt-4 bg-muted/50 px-3 py-1 rounded-full border border-border">
+            JPG, PNG, WEBP (Max 50MB)
+          </p>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -107,54 +335,57 @@ export function MediaUploader({ media, onChange }: MediaUploaderProps) {
         />
       </label>
 
+      {/* Cropper for new uploads */}
+      {currentCropping && (
+        <ImageCropperModal
+          image={currentCropping.originalUrl}
+          open={true}
+          onCropComplete={onCropComplete}
+          onCancel={onCropCancel}
+        />
+      )}
+
+      {/* Cropper for re-editing existing media */}
+      {editingMedia && (
+        <ImageCropperModal
+          image={editingMedia.originalUrl || editingMedia.url}
+          open={true}
+          onCropComplete={onCropComplete}
+          onCancel={onCropCancel}
+        />
+      )}
+
       {media.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-          {media.map((m) => {
-            const uploadStatus = getUploadStatus(m.id);
-            const isUploading = uploadStatus && uploadStatus.status === "uploading";
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-sm font-bold text-foreground">Media Gallery ({media.length})</h3>
+            <span className="text-[11px] text-muted-foreground font-medium italic">Hint: Drag items to reorder</span>
+          </div>
 
-            return (
-              <div
-                key={m.id}
-                className={`relative group rounded-lg overflow-hidden border-2 aspect-square ${m.isMain ? "border-primary" : "border-border"}`}
-              >
-                {m.type === "image" ? (
-                  <img src={m.url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-muted flex items-center justify-center">
-                    <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                  </div>
-                )}
-
-                {/* Upload progress overlay */}
-                {isUploading && (
-                  <div className="absolute inset-0 bg-foreground/60 flex flex-col items-center justify-center gap-2">
-                    <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" />
-                    <div className="w-3/4">
-                      <Progress value={uploadStatus.progress} className="h-1.5" />
-                    </div>
-                    <span className="text-[10px] text-primary-foreground font-medium">
-                      {Math.round(uploadStatus.progress)}%
-                    </span>
-                  </div>
-                )}
-
-                <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/40 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                  <button onClick={() => setMain(m.id)} className="p-1 bg-card rounded text-xs font-medium">
-                    Main
-                  </button>
-                  <button onClick={() => remove(m.id)} className="p-1 bg-destructive text-destructive-foreground rounded">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-                {m.isMain && (
-                  <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded font-medium">
-                    Main
-                  </span>
-                )}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={media.map((m) => m.id)}
+              strategy={horizontalListSortingStrategy}
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {media.map((m) => (
+                  <SortableMediaItem
+                    key={m.id}
+                    m={m}
+                    isMain={m.isMain}
+                    onSetMain={setMain}
+                    onRemove={remove}
+                    onEdit={(item) => setEditingMedia(item)}
+                    uploadStatus={getUploadStatus(m.id)}
+                  />
+                ))}
               </div>
-            );
-          })}
+            </SortableContext>
+          </DndContext>
         </div>
       )}
     </div>

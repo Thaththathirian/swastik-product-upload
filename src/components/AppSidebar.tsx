@@ -33,7 +33,7 @@ export function AppSidebar() {
           <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
             <Package className="w-4 h-4 text-sidebar-primary-foreground" />
           </div>
-          <span className="font-bold text-sidebar-foreground tracking-tight">PMS Admin</span>
+          <span className="font-bold text-sidebar-foreground tracking-tight">Product Upload</span>
         </div>
 
         <nav className="flex-1 p-3 space-y-1">

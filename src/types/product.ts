@@ -1,6 +1,7 @@
 export interface ProductMedia {
   id: string;
   url: string;
+  originalUrl?: string;
   type: "image" | "video";
   isMain: boolean;
   isThumbnail: boolean;
