@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect } from "react";
-import { Upload, X, Image as ImageIcon, Loader2, GripVertical } from "lucide-react";
+import { Upload, X, Image as ImageIcon, Loader2, GripVertical, Play } from "lucide-react";
 import { ProductMedia } from "@/types/product";
 import { Progress } from "@/components/ui/progress";
 import { ImageCropperModal } from "./ImageCropperModal";
@@ -25,6 +25,7 @@ import { CSS } from "@dnd-kit/utilities";
 interface MediaUploaderProps {
   media: ProductMedia[];
   onChange: (media: ProductMedia[]) => void;
+  readOnly?: boolean;
 }
 
 interface UploadingFile {
@@ -42,9 +43,11 @@ interface SortableMediaItemProps {
   onRemove: (id: string) => void;
   onEdit: (m: ProductMedia) => void;
   uploadStatus?: UploadingFile;
+  readOnly?: boolean;
 }
 
-function SortableMediaItem({ m, onSetMain, onRemove, onEdit, uploadStatus }: SortableMediaItemProps) {
+function SortableMediaItem({ m, onSetMain, onRemove, onEdit, uploadStatus, readOnly }: SortableMediaItemProps) {
+  const [imgError, setImgError] = useState(false);
   const {
     attributes,
     listeners,
@@ -62,19 +65,45 @@ function SortableMediaItem({ m, onSetMain, onRemove, onEdit, uploadStatus }: Sor
 
   const isUploading = uploadStatus && uploadStatus.status === "uploading";
 
+  const handleEditClick = (e: React.MouseEvent) => {
+    if (readOnly || isUploading) return;
+    onEdit(m);
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative group rounded-lg overflow-hidden border-2 aspect-square bg-background transition-colors ${m.isMain ? "border-primary" : "border-border hover:border-primary/50"} ${isDragging ? "opacity-50 z-50 shadow-xl" : ""}`}
-      {...attributes}
-      {...listeners}
+      className={`relative group rounded-xl overflow-hidden border-2 aspect-square bg-background transition-all ${!readOnly ? "cursor-pointer" : ""} ${m.isMain ? "border-primary shadow-sm" : "border-border hover:border-primary/50 hover:shadow-md"} ${isDragging ? "opacity-50 z-50 shadow-xl" : ""}`}
+      {...(readOnly ? {} : attributes)}
+      {...(readOnly ? {} : listeners)}
+      onClick={handleEditClick}
     >
       {m.type === "image" ? (
-        <img src={m.url} alt="" className="w-full h-full object-cover cursor-default" />
+        !imgError ? (
+          <img
+            src={m.url}
+            alt=""
+            className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-muted/30 text-muted-foreground/30">
+            <ImageIcon className="w-8 h-8 opacity-20" />
+            <span className="text-[10px] mt-2 font-medium">Broken Image</span>
+          </div>
+        )
       ) : (
-        <div className="w-full h-full bg-muted flex items-center justify-center">
-          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+        <div className="relative w-full h-full bg-black flex items-center justify-center">
+          <video src={m.url} className="w-full h-full object-cover opacity-60" muted />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30">
+              <Play className="w-5 h-5 text-white fill-white" />
+            </div>
+          </div>
+          <span className="absolute bottom-2 left-2 bg-black/50 text-[9px] text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-widest backdrop-blur-sm border border-white/10">
+            Video
+          </span>
         </div>
       )}
 
@@ -91,45 +120,37 @@ function SortableMediaItem({ m, onSetMain, onRemove, onEdit, uploadStatus }: Sor
         </div>
       )}
 
-      <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/40 transition-colors flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 p-2">
-        <div className="flex gap-1.5" onPointerDown={e => e.stopPropagation()}>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSetMain(m.id);
-            }}
-            className="p-1.5 px-3 bg-white text-black rounded-md text-[10px] font-bold uppercase shadow-sm transition-all hover:bg-primary hover:text-white"
-          >
-            Main
-          </button>
+      {!readOnly && (
+        <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/40 transition-colors flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 p-2">
+          <div className="flex gap-1.5" onPointerDown={e => e.stopPropagation()}>
+            {!m.isMain && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSetMain(m.id);
+                }}
+                className="p-1.5 px-3 bg-white text-black rounded-md text-[10px] font-bold uppercase shadow-sm transition-all hover:bg-primary hover:text-white"
+              >
+                Main
+              </button>
+            )}
 
-          {m.type === "image" && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onEdit(m);
+                onRemove(m.id);
               }}
-              className="p-1.5 bg-white text-black rounded-md shadow-sm transition-all hover:bg-primary hover:text-white"
+              className="p-1.5 bg-destructive text-destructive-foreground rounded-md shadow-sm transition-all hover:scale-105"
             >
-              <ImageIcon className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" />
             </button>
-          )}
+          </div>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(m.id);
-            }}
-            className="p-1.5 bg-destructive text-destructive-foreground rounded-md shadow-sm transition-all hover:scale-105"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="absolute bottom-2 right-2 p-1 bg-white/20 rounded backdrop-blur-sm pointer-events-none">
+            <GripVertical className="w-3.5 h-3.5 text-white" />
+          </div>
         </div>
-
-        <div className="absolute bottom-2 right-2 p-1 bg-white/20 rounded backdrop-blur-sm pointer-events-none">
-          <GripVertical className="w-3.5 h-3.5 text-white" />
-        </div>
-      </div>
+      )}
 
       {m.isMain && (
         <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded font-bold shadow-sm z-10">
@@ -140,7 +161,7 @@ function SortableMediaItem({ m, onSetMain, onRemove, onEdit, uploadStatus }: Sor
   );
 }
 
-export function MediaUploader({ media, onChange }: MediaUploaderProps) {
+export function MediaUploader({ media, onChange, readOnly }: MediaUploaderProps) {
   const [uploading, setUploading] = useState<UploadingFile[]>([]);
   const [cropQueue, setCropQueue] = useState<{ id: string; url: string; type: string; originalUrl: string }[]>([]);
   const [currentCropping, setCurrentCropping] = useState<{ id: string; url: string; type: string; originalUrl: string } | null>(null);
@@ -180,11 +201,7 @@ export function MediaUploader({ media, onChange }: MediaUploaderProps) {
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files) return;
-      const validFiles = Array.from(files).filter((f) => f.size <= 50 * 1024 * 1024);
-
-      if (validFiles.length < files.length) {
-        alert("Some files exceeded the 50MB limit and were skipped.");
-      }
+      const validFiles = Array.from(files);
 
       const newQueue = validFiles.map((file) => {
         const url = URL.createObjectURL(file);
@@ -302,7 +319,7 @@ export function MediaUploader({ media, onChange }: MediaUploaderProps) {
       const newIndex = media.findIndex((m) => m.id === over.id);
 
       const newOrder = arrayMove(media, oldIndex, newIndex);
-      onChange(newOrder);
+      if (!readOnly) onChange(newOrder);
     }
   };
 
@@ -310,31 +327,6 @@ export function MediaUploader({ media, onChange }: MediaUploaderProps) {
 
   return (
     <div className="space-y-4">
-      <label className="flex flex-col items-center justify-center min-h-[160px] border-2 border-dashed border-border rounded-2xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group relative overflow-hidden">
-        <div className="flex flex-col items-center justify-center p-6 text-center">
-          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-primary/10 transition-all duration-300">
-            <Upload className="w-7 h-7 text-muted-foreground group-hover:text-primary transition-colors" />
-          </div>
-          <p className="text-base font-semibold text-foreground mb-1">
-            Upload Product Images
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Drag and drop or click to browse
-          </p>
-          <p className="text-[11px] text-muted-foreground/60 mt-4 bg-muted/50 px-3 py-1 rounded-full border border-border">
-            JPG, PNG, WEBP (Max 50MB)
-          </p>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-      </label>
-
       {/* Cropper for new uploads */}
       {currentCropping && (
         <ImageCropperModal
@@ -355,13 +347,40 @@ export function MediaUploader({ media, onChange }: MediaUploaderProps) {
         />
       )}
 
-      {media.length > 0 && (
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-sm font-bold text-foreground">Media Gallery ({media.length})</h3>
-            <span className="text-[11px] text-muted-foreground font-medium italic">Hint: Drag items to reorder</span>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-foreground">Media</h3>
+            <span className="text-[11px] text-muted-foreground">({media.length} files)</span>
           </div>
+          {media.length > 0 && !readOnly && (
+            <span className="text-[11px] text-muted-foreground font-medium italic">Hint: Drag to reorder</span>
+          )}
+        </div>
 
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          {/* Compact Upload Area as First Item */}
+          {!readOnly && (
+            <label className="relative aspect-square flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group overflow-hidden bg-muted/20">
+              <div className="flex flex-col items-center justify-center text-center p-2">
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center mb-1.5 group-hover:scale-110 group-hover:bg-primary/20 transition-all">
+                  <Upload className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                </div>
+                <p className="text-[11px] font-bold text-foreground uppercase tracking-tight">Upload</p>
+                <p className="text-[9px] text-muted-foreground hidden sm:block">Click or Drop</p>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+            </label>
+          )}
+
+          {/* Media Items */}
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -371,23 +390,22 @@ export function MediaUploader({ media, onChange }: MediaUploaderProps) {
               items={media.map((m) => m.id)}
               strategy={horizontalListSortingStrategy}
             >
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {media.map((m) => (
-                  <SortableMediaItem
-                    key={m.id}
-                    m={m}
-                    isMain={m.isMain}
-                    onSetMain={setMain}
-                    onRemove={remove}
-                    onEdit={(item) => setEditingMedia(item)}
-                    uploadStatus={getUploadStatus(m.id)}
-                  />
-                ))}
-              </div>
+              {media.map((m) => (
+                <SortableMediaItem
+                  key={m.id}
+                  m={m}
+                  isMain={m.isMain}
+                  onSetMain={setMain}
+                  onRemove={remove}
+                  onEdit={(item) => setEditingMedia(item)}
+                  uploadStatus={getUploadStatus(m.id)}
+                  readOnly={readOnly}
+                />
+              ))}
             </SortableContext>
           </DndContext>
         </div>
-      )}
+      </div>
     </div>
   );
 }

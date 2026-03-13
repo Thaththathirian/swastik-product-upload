@@ -12,8 +12,8 @@ export interface ProductVariant {
   id: string;
   type: string;
   name: string;
-  price: number;
-  stock: number;
+  price: number | null;
+  stock: number | null;
 }
 
 export interface FeatureItem {
@@ -50,6 +50,7 @@ export interface ProductShipping {
 
 export interface Product {
   id: string;
+  productCode: string;
   sku: string;
   name: string;
   slug: string;
@@ -62,19 +63,23 @@ export interface Product {
   detailedDescription: string;
   highlights: string[];
   usage: string;
+  machineType?: string;
+  powerCapacity?: string;
+  speed?: string;
+  warrantyPeriod?: string;
+  hsnCode?: string;
   media: ProductMedia[];
-  mrp: number;
-  sellingPrice: number;
-  discountPercent: number;
-  gstPercent: number;
-  stockQuantity: number;
+  mrp: number | null;
+  sellingPrice: number | null;
+  discountPercent: number | null;
+  gstPercent: number | null;
+  stockQuantity: number | null;
   stockStatus: "in_stock" | "out_of_stock";
-  lowStockWarning: number;
+  lowStockWarning: number | null;
   variants: ProductVariant[];
   featureSections: FeatureSection[];
   specifications: ProductSpecification[];
   relatedProductIds: string[];
-  comparisonFields: string[];
   shipping: ProductShipping;
   seo: ProductSEO;
   isActive: boolean;
@@ -86,6 +91,7 @@ export interface Product {
 }
 
 export const emptyProduct: Omit<Product, "id" | "createdAt" | "updatedAt"> = {
+  productCode: "",
   sku: "",
   name: "",
   slug: "",
@@ -98,19 +104,23 @@ export const emptyProduct: Omit<Product, "id" | "createdAt" | "updatedAt"> = {
   detailedDescription: "",
   highlights: [],
   usage: "",
+  machineType: "",
+  powerCapacity: "",
+  speed: "",
+  warrantyPeriod: "",
+  hsnCode: "",
   media: [],
-  mrp: 0,
-  sellingPrice: 0,
-  discountPercent: 0,
-  gstPercent: 0,
-  stockQuantity: 0,
+  mrp: null,
+  sellingPrice: null,
+  discountPercent: null,
+  gstPercent: null,
+  stockQuantity: null,
   stockStatus: "in_stock",
-  lowStockWarning: 5,
+  lowStockWarning: null,
   variants: [],
   featureSections: [],
   specifications: [],
   relatedProductIds: [],
-  comparisonFields: [],
   shipping: { weight: "", length: "", width: "", height: "", estimatedDelivery: "" },
   seo: { title: "", description: "", keywords: "" },
   isActive: true,

@@ -38,7 +38,13 @@ export function AppSidebar() {
 
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map((item) => {
-            const active = item.to === "/" ? location.pathname === "/" : location.pathname === item.to;
+            const active = item.to === "/"
+              ? location.pathname === "/"
+              : item.to === "/products"
+                ? (location.pathname === "/products" || location.pathname.startsWith("/products/edit") || location.pathname.startsWith("/products/view"))
+                : item.to === "/products/new"
+                  ? location.pathname === "/products/new"
+                  : location.pathname === item.to;
             return (
               <Link
                 key={item.to}
